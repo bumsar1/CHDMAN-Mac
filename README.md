@@ -37,10 +37,10 @@ pip3 install pillow tkinterdnd2
 
 ## Usage
 
-### Option A — Run the .app directly
-1. Download or clone this repo
-2. Open `CHDMAN.app` (double-click)
-3. If macOS blocks it: right-click → Open → Open anyway
+### Option A — Build and run the .app
+1. Clone this repo
+2. Run `bash build_app.sh` in Terminal
+3. Open the generated `CHDMAN.app` (double-click)
 4. The pre-flight check will guide you if anything is missing
 
 ### Option B — Run from Terminal
