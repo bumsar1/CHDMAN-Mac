@@ -6,6 +6,12 @@ A retro PS1-themed macOS app for batch converting `.cue` and `.iso` disc images 
 
 ---
 
+## Preview
+
+![CHDMAN Demo](Screen%20Recording%202026-06-01%20at%2016.06.44.gif)
+
+---
+
 ## Download
 
 👉 **[Download latest release (DMG)](https://github.com/bumsar1/CHDMAN-Mac/releases/latest)**
