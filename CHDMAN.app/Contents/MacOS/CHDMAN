@@ -1,4 +1,0 @@
-#!/bin/zsh
-SCRIPT_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
-exec arch -arm64 /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
-     "$SCRIPT_DIR/chdman_tool.py"
