@@ -572,88 +572,74 @@ class App(BaseClass):
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _build_header(self):
-        BANNER_W, BANNER_H = 720, 140
-        banner_ok = False
+        BANNER_H = 140
+        self._banner_pil = None
 
         if HAS_PIL:
             try:
                 img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         "Picture.jpg")
-                resample = getattr(Image, "Resampling", Image).LANCZOS
-                img = Image.open(img_path).resize((BANNER_W, BANNER_H), resample)
-
-                # Darken
-                img = ImageEnhance.Brightness(img).enhance(0.35)
-                img = img.filter(ImageFilter.GaussianBlur(radius=2))
-
-                # Vignette: darken edges more
-                vignette = Image.new("L", (BANNER_W, BANNER_H), 0)
-                draw = ImageDraw.Draw(vignette)
-                max_i = min(BANNER_W // 2, BANNER_H // 2)
-                for i in range(max_i):
-                    alpha = int(255 * (i / max_i))
-                    draw.rectangle([i, i, BANNER_W - i - 1, BANNER_H - i - 1],
-                                   outline=alpha)
-                img = Image.composite(img, Image.new("RGB", img.size, "#050318"),
-                                      vignette)
-
-                self._banner_img = ImageTk.PhotoImage(img)
-
-                canvas = tk.Canvas(self, width=BANNER_W, height=BANNER_H,
-                                   bd=0, highlightthickness=0, bg=BG)
-                canvas.pack(fill="x")
-                canvas.create_image(0, 0, anchor="nw", image=self._banner_img)
-
-                # Bottom gradient fade
-                for i in range(30):
-                    alpha = int(255 * (i / 30))
-                    r = int(0x0B * (1 - i/30))
-                    g = int(0x08 * (1 - i/30))
-                    b = int(0x20 * (1 - i/30))
-                    y = BANNER_H - 30 + i
-                    canvas.create_line(0, y, BANNER_W, y,
-                                       fill=f"#{r:02x}{g:02x}{max(1,b):02x}")
-
-                # Glow title — multiple shadow layers
-                tx, ty = 24, BANNER_H // 2 - 16
-                for dx, dy, c in [(-2,0,GLOW),(2,0,GLOW),(0,-2,GLOW),(0,2,GLOW),
-                                   (-1,-1,GLOW),(1,1,GLOW)]:
-                    canvas.create_text(tx+dx, ty+dy, text="CHDMAN  CREATECD",
-                                       font=FONT_TITLE, fill=c, anchor="w")
-                canvas.create_text(tx, ty, text="CHDMAN  CREATECD",
-                                   font=FONT_TITLE, fill=ORANGE, anchor="w")
-
-                # Subtitle
-                canvas.create_text(tx + 2, ty + 30,
-                                   text="BATCH DISC IMAGE CONVERTER",
-                                   font=FONT_XS, fill=TEXT, anchor="w")
-
-                # Top orange line
-                canvas.create_line(0, 0, BANNER_W, 0, fill=ORANGE, width=4)
-                # Bottom bright line
-                canvas.create_line(0, BANNER_H-1, BANNER_W, BANNER_H-1,
-                                   fill=CYAN, width=2)
-                banner_ok = True
+                self._banner_pil = Image.open(img_path)
             except Exception:
                 pass
 
-        if not banner_ok:
-            # Fallback without PIL
-            canvas = tk.Canvas(self, width=BANNER_W, height=100,
-                               bd=0, highlightthickness=0, bg=BG)
-            canvas.pack(fill="x")
-            canvas.create_line(0, 0, BANNER_W, 0, fill=ORANGE, width=4)
+        canvas = tk.Canvas(self, height=BANNER_H, bd=0, highlightthickness=0, bg=BG)
+        canvas.pack(fill="x")
+        self._banner_canvas = canvas
+        self._banner_h = BANNER_H
+        self._banner_photo = None
+        canvas.bind("<Configure>", self._redraw_banner)
 
-            tx, ty = 24, 35
-            for dx, dy in [(-2,0),(2,0),(0,-2),(0,2)]:
-                canvas.create_text(tx+dx, ty+dy, text="CHDMAN  CREATECD",
-                                   font=FONT_TITLE, fill=GLOW, anchor="w")
-            canvas.create_text(tx, ty, text="CHDMAN  CREATECD",
-                               font=FONT_TITLE, fill=ORANGE, anchor="w")
-            canvas.create_text(tx + 2, ty + 30,
-                               text="BATCH DISC IMAGE CONVERTER",
-                               font=FONT_XS, fill=DIM, anchor="w")
-            canvas.create_line(0, 99, BANNER_W, 99, fill=CYAN, width=2)
+    def _redraw_banner(self, e=None):
+        canvas = self._banner_canvas
+        w = canvas.winfo_width()
+        h = self._banner_h
+        if w < 2:
+            return
+        canvas.delete("all")
+
+        if self._banner_pil and HAS_PIL:
+            try:
+                resample = getattr(Image, "Resampling", Image).LANCZOS
+                img = self._banner_pil.resize((w, h), resample)
+                img = ImageEnhance.Brightness(img).enhance(0.35)
+                img = img.filter(ImageFilter.GaussianBlur(radius=2))
+
+                vignette = Image.new("L", (w, h), 0)
+                draw = ImageDraw.Draw(vignette)
+                max_i = min(w // 2, h // 2)
+                for i in range(max_i):
+                    alpha = int(255 * (i / max_i))
+                    draw.rectangle([i, i, w - i - 1, h - i - 1], outline=alpha)
+                img = Image.composite(img, Image.new("RGB", img.size, "#050318"), vignette)
+
+                self._banner_photo = ImageTk.PhotoImage(img)
+                canvas.create_image(0, 0, anchor="nw", image=self._banner_photo)
+            except Exception:
+                pass
+
+        # Bottom gradient fade
+        for i in range(30):
+            r = int(0x0B * (1 - i/30))
+            g = int(0x08 * (1 - i/30))
+            b = int(0x20 * (1 - i/30))
+            y = h - 30 + i
+            canvas.create_line(0, y, w, y, fill=f"#{r:02x}{g:02x}{max(1,b):02x}")
+
+        # Glow title
+        tx, ty = 24, h // 2 - 16
+        for dx, dy, c in [(-2,0,GLOW),(2,0,GLOW),(0,-2,GLOW),(0,2,GLOW),
+                           (-1,-1,GLOW),(1,1,GLOW)]:
+            canvas.create_text(tx+dx, ty+dy, text="CHDMAN  CREATECD",
+                               font=FONT_TITLE, fill=c, anchor="w")
+        canvas.create_text(tx, ty, text="CHDMAN  CREATECD",
+                           font=FONT_TITLE, fill=ORANGE, anchor="w")
+        canvas.create_text(tx + 2, ty + 30, text="BATCH DISC IMAGE CONVERTER",
+                           font=FONT_XS, fill=TEXT, anchor="w")
+
+        # Lines
+        canvas.create_line(0, 0, w, 0, fill=ORANGE, width=4)
+        canvas.create_line(0, h-1, w, h-1, fill=CYAN, width=2)
 
     # ── Queue ─────────────────────────────────────────────────────────────────
     def _build_queue(self):
@@ -755,8 +741,9 @@ class App(BaseClass):
         self.status_lbl = tk.Label(row, text="", bg=BG, fg=DIM, font=FONT_SM)
         self.status_lbl.pack(side="left", padx=14)
 
-        # Health bar progress
-        self.progress = HealthBar(row, width=180, height=18)
+        # Health bar — full width row below buttons
+        self.progress = HealthBar(self, height=10)
+        self.progress.pack(fill="x", padx=20, pady=(0, 6))
 
     # ── Log ───────────────────────────────────────────────────────────────────
     def _build_log(self):
@@ -958,7 +945,6 @@ class App(BaseClass):
             return
         self._running = True
         self.run_btn.disable("  RUNNING...  ")
-        self.progress.pack(side="left", padx=(10, 0))
         self.progress.start_indeterminate()
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
@@ -1010,7 +996,6 @@ class App(BaseClass):
         self._running = False
         self._stop_pulse()
         self.progress.stop()
-        self.progress.pack_forget()
         self.run_btn.enable("  CONVERT ALL  ")
         done   = sum(1 for j in self.jobs if j["status"] == "done")
         failed = sum(1 for j in self.jobs if j["status"] == "failed")
