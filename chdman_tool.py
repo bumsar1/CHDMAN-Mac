@@ -71,7 +71,7 @@ def start_music():
     def _loop():
         global _music_proc
         while _music_proc is not None:
-            _music_proc = subprocess.Popen(["afplay", MUSIC_PATH])
+            _music_proc = subprocess.Popen(["afplay", "--volume", "0.2", MUSIC_PATH])
             _music_proc.wait()
     _music_proc = True
     threading.Thread(target=_loop, daemon=True).start()
