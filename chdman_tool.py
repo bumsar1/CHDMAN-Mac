@@ -18,6 +18,8 @@ try:
 except Exception:
     HAS_PIL = False
 
+VERSION = "2.2"
+
 # ── PS1 Color Palette ─────────────────────────────────────────────────────────
 BG         = "#0B0820"
 BG_DEEP    = "#06041A"
@@ -62,26 +64,26 @@ STATUS_STRIP = {
 # ── Music ─────────────────────────────────────────────────────────────────────
 MUSIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "Crash Bandicoot The Wrath of Cortex Theme.mp3")
+_music_on = False
 _music_proc = None
 
 def start_music():
-    global _music_proc
-    if not os.path.exists(MUSIC_PATH):
+    global _music_on
+    if not os.path.exists(MUSIC_PATH) or _music_on:
         return
+    _music_on = True
     def _loop():
         global _music_proc
-        while _music_proc is not None:
+        while _music_on:
             _music_proc = subprocess.Popen(["afplay", "--volume", "0.2", MUSIC_PATH])
             _music_proc.wait()
-    _music_proc = True
     threading.Thread(target=_loop, daemon=True).start()
 
 def stop_music():
-    global _music_proc
-    proc = _music_proc
-    _music_proc = None
-    if hasattr(proc, "terminate"):
-        proc.terminate()
+    global _music_on
+    _music_on = False
+    if _music_proc is not None:
+        _music_proc.terminate()
 
 def play(sound):
     path = f"/System/Library/Sounds/{sound}.aiff"
@@ -124,8 +126,6 @@ def check_prereqs():
     ))
 
     return results
-
-CHDMAN = find_chdman()
 
 def parse_drop_data(data):
     paths, data = [], data.strip()
@@ -552,6 +552,7 @@ class App(BaseClass):
         self._row_index = 0
         self._muted     = False
         self._pulse_id  = None
+        self._current_proc = None
 
         self._build_header()
         self._build_queue()
@@ -776,9 +777,10 @@ class App(BaseClass):
         self._hud = hud
 
         # Top line
-        hud.create_line(0, 0, 2000, 0, fill=ORANGE, width=3)
+        hud.create_line(0, 0, 4000, 0, fill=ORANGE, width=3)
 
         self._hud_items = {}
+        hud.bind("<Configure>", lambda e: self._update_hud())
         self._update_hud()
 
     def _update_hud(self):
@@ -805,8 +807,9 @@ class App(BaseClass):
                             fill=color, anchor="w", tags="stats")
             x += 30
 
-        # Version on right
-        hud.create_text(700, 15, text="v2.0", font=FONT_HUD,
+        # Version on right edge
+        right = max(hud.winfo_width() - 16, 700)
+        hud.create_text(right, 15, text=f"v{VERSION}", font=FONT_HUD,
                         fill=DIM2, anchor="e", tags="stats")
 
     # ── File adding ───────────────────────────────────────────────────────────
@@ -825,7 +828,13 @@ class App(BaseClass):
 
     def _on_drop(self, event):
         for path in parse_drop_data(event.data):
-            if path.lower().endswith((".cue", ".iso")):
+            if os.path.isdir(path):
+                # Scan dropped folder for disc images
+                for root, _, files in os.walk(path):
+                    for f in sorted(files):
+                        if f.lower().endswith((".cue", ".iso")):
+                            self._enqueue(os.path.join(root, f))
+            elif path.lower().endswith((".cue", ".iso")):
                 self._enqueue(path)
 
     def _enqueue(self, cue_path):
@@ -968,10 +977,23 @@ class App(BaseClass):
         threading.Thread(target=self._worker, args=(job, out, rest), daemon=True).start()
 
     def _worker(self, job, out, rest):
-        cmd = [CHDMAN, "createcd", "-i", job["cue"], "-o", out]
+        # Skip if the output file is already there
+        if os.path.exists(out):
+            self.after(0, self._set_job_status, job, "done")
+            self.after(0, self._log,
+                       "  >> SKIPPED — output file already exists\n", "ok")
+            self.after(0, self._convert_next, rest)
+            return
+
+        # Re-resolve chdman each run, in case it was just installed
+        cmd = [find_chdman(), "createcd", "-i", job["cue"], "-o", out]
         try:
+            out_dir = os.path.dirname(out)
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
+            self._current_proc = proc
             for line in proc.stdout:
                 self.after(0, self._log, "  " + line)
             proc.wait()
@@ -987,9 +1009,10 @@ class App(BaseClass):
         except FileNotFoundError:
             self.after(0, self._set_job_status, job, "failed")
             self.after(0, self._log,
-                       "  !! ERROR: 'chdman' not found in PATH\n", "err")
+                       "  !! ERROR: 'chdman' not found — click INSTALL CHDMAN\n", "err")
             self.after(0, play, "Basso")
         finally:
+            self._current_proc = None
             self.after(0, self._convert_next, rest)
 
     def _finish_all(self):
@@ -1034,6 +1057,13 @@ class App(BaseClass):
 
     def _on_close(self):
         stop_music()
+        # Kill any running conversion so it doesn't linger in the background
+        proc = self._current_proc
+        if proc is not None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
         self.destroy()
 
 
